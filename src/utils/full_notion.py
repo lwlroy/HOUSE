@@ -571,7 +571,10 @@ class FullNotionClient:
         if comparison and comparison.get('has_previous_data'):
             self._add_comparison_sections(blocks, comparison)
         
-        # 物件詳情
+        # 物件詳情 - 需要分批處理，因為 Notion API 限制
+        max_properties_per_page = 20  # 每頁最多顯示 20 個物件，避免超過 Notion 100 個區塊限制
+        displayed_properties = properties[:max_properties_per_page]
+        
         blocks.append({
             "object": "block",
             "type": "heading_2", 
@@ -579,13 +582,28 @@ class FullNotionClient:
                 "rich_text": [
                     {
                         "type": "text",
-                        "text": {"content": f"🏘️ {district_name}區所有物件詳情"}
+                        "text": {"content": f"🏘️ {district_name}區物件詳情 (顯示前 {len(displayed_properties)} 個)"}
                     }
                 ]
             }
         })
         
-        for i, prop in enumerate(properties, 1):
+        if len(properties) > max_properties_per_page:
+            blocks.append({
+                "object": "block",
+                "type": "callout",
+                "callout": {
+                    "rich_text": [
+                        {
+                            "type": "text",
+                            "text": {"content": f"⚠️ 因頁面限制，此處僅顯示前 {max_properties_per_page} 個物件。總共找到 {len(properties)} 個物件，其餘物件請參考本地 JSON 檔案。"}
+                        }
+                    ],
+                    "icon": {"emoji": "⚠️"}
+                }
+            })
+        
+        for i, prop in enumerate(displayed_properties, 1):
             # 檢查是否為新增物件
             is_new = False
             if comparison and comparison.get('new_properties'):
@@ -670,14 +688,6 @@ class FullNotionClient:
                     ] + link_blocks
                 }
             })
-            
-            # 分隔線
-            if i < len(properties):
-                blocks.append({
-                    "object": "block",
-                    "type": "divider",
-                    "divider": {}
-                })
         
         return blocks
     

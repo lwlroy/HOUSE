@@ -625,30 +625,36 @@ class SimpleSinyiCrawler:
             
             # 將字典資料轉換為 Property 對象
             property_objects = []
-            for prop_dict in properties:
+            for i, prop_dict in enumerate(properties):
                 try:
+                    # 生成唯一 ID
+                    prop_id = f"{self.district_config['name']}_{i+1}_{prop_dict.get('title', '')[:10]}"
+                    
                     prop = Property(
+                        id=prop_id,
                         title=prop_dict.get('title', ''),
                         address=prop_dict.get('address', ''),
-                        total_price=prop_dict.get('price', 0),
+                        district=self.district_config['name'],
+                        region='新北市' if self.district_config['name'] != '台北' else '台北市',
+                        price=int(prop_dict.get('price', 0)),
+                        room_count=prop_dict.get('room_count', 3),
+                        living_room_count=prop_dict.get('living_room_count', 2),
+                        bathroom_count=prop_dict.get('bathroom_count', 2),
                         size=prop_dict.get('size', 0),
+                        floor=str(prop_dict.get('floor', '')),
+                        source_site="信義房屋",
                         source_url=prop_dict.get('url', ''),
-                        source_site="信義房屋"
+                        property_type='sale'  # 買屋
                     )
+                    
+                    # 設定買屋專用欄位
+                    prop.total_price = int(prop_dict.get('price', 0))  # 總價
                     
                     # 設定其他屬性（如果有的話）
                     if 'main_area' in prop_dict:
                         prop.main_area = prop_dict['main_area']
                     if 'unit_price' in prop_dict:
                         prop.unit_price = prop_dict['unit_price']
-                    if 'room_count' in prop_dict:
-                        prop.room_count = prop_dict['room_count']
-                    if 'living_room_count' in prop_dict:
-                        prop.living_room_count = prop_dict['living_room_count']
-                    if 'bathroom_count' in prop_dict:
-                        prop.bathroom_count = prop_dict['bathroom_count']
-                    if 'floor' in prop_dict:
-                        prop.floor = prop_dict['floor']
                     if 'total_floors' in prop_dict:
                         prop.total_floors = prop_dict['total_floors']
                     if 'age' in prop_dict:
