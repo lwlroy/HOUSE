@@ -251,16 +251,19 @@ class SimpleSinyiCrawler:
         
         # 提取標題 - 通常是連結的文字
         title_elem = container.find('a', href=re.compile(r'/buy/house/'))
-        title = self.clean_text(title_elem.get_text()) if title_elem else "未知物件"
+        raw_title = self.clean_text(title_elem.get_text()) if title_elem else "未知物件"
         
-        # 如果標題太短，嘗試尋找更詳細的標題
-        if len(title) < 5:
+        # 如果原始標題太短，嘗試尋找更詳細的標題
+        if len(raw_title) < 5:
             title_candidates = container.find_all(['h1', 'h2', 'h3', 'h4', 'h5'])
             for candidate in title_candidates:
                 candidate_text = self.clean_text(candidate.get_text())
-                if len(candidate_text) > len(title):
-                    title = candidate_text
+                if len(candidate_text) > len(raw_title):
+                    raw_title = candidate_text
                     break
+        
+        # 從完整標題中提取簡潔的物件名稱
+        title = self.extract_property_name(raw_title)
         
         # 提取價格
         price = self.extract_price(container_text)
@@ -314,6 +317,62 @@ class SimpleSinyiCrawler:
         if not text:
             return ""
         return re.sub(r'\s+', ' ', str(text)).strip()
+    
+    def extract_property_name(self, title: str) -> str:
+        """從完整標題中提取簡潔的物件名稱"""
+        if not title:
+            return "未知物件"
+        
+        # 移除常見的前綴
+        title = re.sub(r'^(店長推薦|專任|獨家|急售|出價就談|可看|新接|稀有|推薦)\s*[★❤️⭐✿㊣\[\]｜·]*\s*', '', title)
+        
+        # 嘗試提取社區名稱
+        patterns = [
+            # 模式1: 社區名稱重複出現的情況 (如: "榮耀巴黎...榮耀巴黎新北市")
+            r'([A-Za-z\u4e00-\u9fff]{3,15}).*?\1新北市',
+            # 模式2: 明確的社區名稱 (如: "全球嘉年華新北市")
+            r'([A-Za-z\u4e00-\u9fff]{3,15})新北市',
+            # 模式3: 社區名稱在最末尾 (如: "森活大市新北市") 
+            r'([A-Za-z\u4e00-\u9fff]{3,12})新北市[^A-Za-z\u4e00-\u9fff]*$',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, title)
+            if match:
+                extracted = match.group(1).strip()
+                
+                # 檢查是否為有效的社區名稱
+                if 3 <= len(extracted) <= 15:
+                    # 避免一些通用詞彙
+                    avoid_words = ['三房', '四房', '電梯', '車位', '大樓', '華廈', '建坪', '年華', '年大']
+                    if not any(word in extracted for word in avoid_words):
+                        return extracted
+        
+        # 如果沒有找到社區名稱，嘗試提取描述性標題
+        descriptive_patterns = [
+            # 描述 + 社區名稱
+            r'^([^新北台北0-9]{5,20}?)(?:新北|台北)',
+            # 純描述性標題
+            r'^([^新北台北0-9]{3,15}?)(?:[0-9]+年|建坪)',
+        ]
+        
+        for pattern in descriptive_patterns:
+            match = re.search(pattern, title)
+            if match:
+                extracted = match.group(1).strip()
+                # 清理結尾的常見詞彙
+                extracted = re.sub(r'(車位|三房|四房|電梯|景觀|庭院|綠意|邊間|高樓|方正|美學|豪邸)$', '', extracted)
+                if 3 <= len(extracted) <= 20:
+                    return extracted
+        
+        # 最後的備用方案：取前15個字符
+        short_title = title[:15]
+        for separator in ['新北', '台北', '建坪', '年', '房', '萬']:
+            if separator in short_title:
+                short_title = short_title.split(separator)[0]
+                break
+        
+        return short_title.strip() if short_title.strip() else "未知物件"
     
     def extract_price(self, text: str) -> float:
         """提取價格（萬元）"""
