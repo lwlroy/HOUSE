@@ -602,7 +602,7 @@ class SimpleSinyiCrawler:
         }
     
     def upload_to_notion_simple(self, properties: List[Dict[str, Any]], comparison_data: Dict = None) -> bool:
-        """嘗試上傳到 Notion（直接字典版本）"""
+        """嘗試上傳到 Notion（新層級結構）"""
         notion_token = os.getenv('NOTION_API_TOKEN', os.getenv('NOTION_TOKEN'))
         
         if not notion_token:
@@ -613,6 +613,7 @@ class SimpleSinyiCrawler:
         try:
             # 嘗試匯入 Notion 功能
             from src.utils.full_notion import create_full_notion_client
+            from src.models.property import Property
             
             print("🔄 正在上傳到 Notion...")
             
@@ -622,12 +623,55 @@ class SimpleSinyiCrawler:
                 print("❌ Notion API 連接失敗")
                 return False
             
-            # 直接使用字典資料，建立今天的標題
-            today = datetime.now()
-            title = f"{today.strftime('%Y/%m/%d')} {self.district_config['notion_title']}"
+            # 將字典資料轉換為 Property 對象
+            property_objects = []
+            for prop_dict in properties:
+                try:
+                    prop = Property(
+                        title=prop_dict.get('title', ''),
+                        address=prop_dict.get('address', ''),
+                        total_price=prop_dict.get('price', 0),
+                        size=prop_dict.get('size', 0),
+                        source_url=prop_dict.get('url', ''),
+                        source_site="信義房屋"
+                    )
+                    
+                    # 設定其他屬性（如果有的話）
+                    if 'main_area' in prop_dict:
+                        prop.main_area = prop_dict['main_area']
+                    if 'unit_price' in prop_dict:
+                        prop.unit_price = prop_dict['unit_price']
+                    if 'room_count' in prop_dict:
+                        prop.room_count = prop_dict['room_count']
+                    if 'living_room_count' in prop_dict:
+                        prop.living_room_count = prop_dict['living_room_count']
+                    if 'bathroom_count' in prop_dict:
+                        prop.bathroom_count = prop_dict['bathroom_count']
+                    if 'floor' in prop_dict:
+                        prop.floor = prop_dict['floor']
+                    if 'total_floors' in prop_dict:
+                        prop.total_floors = prop_dict['total_floors']
+                    if 'age' in prop_dict:
+                        prop.age = prop_dict['age']
+                    if 'building_type' in prop_dict:
+                        prop.building_type = prop_dict['building_type']
+                    
+                    property_objects.append(prop)
+                except Exception as e:
+                    print(f"⚠️  轉換物件失敗: {e}")
+                    continue
             
-            # 嘗試直接創建內容
-            success = self._create_notion_content_directly(client, title, properties, comparison_data, today)
+            # 使用新的層級結構上傳
+            today = datetime.now()
+            district_name = self._get_district_key()  # 獲取英文區域名稱
+            
+            # 使用新的區域物件清單創建方法
+            success = client.create_district_house_list(
+                properties=property_objects,
+                search_date=today,
+                district_name=district_name,
+                comparison=None  # 暫時不提供比較資料
+            )
             
             if success:
                 print("✅ 成功上傳到 Notion！")
@@ -645,260 +689,14 @@ class SimpleSinyiCrawler:
             traceback.print_exc()
             return False
     
-    def _create_notion_content_directly(self, client, title: str, properties: List[Dict], comparison_data: Dict, today: datetime) -> bool:
-        """直接創建 Notion 內容，不需要 Property 對象轉換"""
-        try:
-            # 生成日期字串用於重複檢測
-            date_str = today.strftime('%Y/%m/%d')
-            
-            # 1. 尋找父頁面 "搜屋筆記"
-            parent_page = client.find_parent_page("搜屋筆記")
-            
-            if not parent_page:
-                # 嘗試使用第一個可用頁面
-                all_pages = client.search_pages("")
-                if all_pages:
-                    parent_page = all_pages[0]
-                    print(f"⚠️  使用第一個可用頁面作為父頁面: {client._extract_page_title(parent_page)}")
-                else:
-                    print("❌ 找不到任何可用的父頁面")
-                    return False
-            
-            parent_page_id = parent_page["id"]
-            
-            # 2. 檢查並刪除同一天同一區域的舊筆記
-            district_name = self.district_config['name']
-            duplicate_pages = client.find_duplicate_pages(parent_page_id, date_str, district_name)
-            
-            if duplicate_pages:
-                print(f"🗑️  發現 {len(duplicate_pages)} 個同日期同區域({district_name})的舊筆記，準備刪除...")
-                for old_page in duplicate_pages:
-                    old_title = client._extract_page_title(old_page)
-                    if client.delete_page(old_page["id"]):
-                        print(f"✅ 已刪除舊筆記: {old_title}")
-                    else:
-                        print(f"❌ 刪除失敗: {old_title}")
-            
-            # 3. 準備內容塊
-            content_blocks = []
-            
-            # 標題說明（包含搜尋URL超連結）
-            district_name = self.district_config['name']
-            search_url = self.district_config['search_url'] + "/1"
-            
-            content_blocks.append({
-                "object": "block",
-                "type": "callout",
-                "callout": {
-                    "rich_text": [
-                        {
-                            "type": "text",
-                            "text": {"content": "🎯 "},
-                        },
-                        {
-                            "type": "text",
-                            "text": {
-                                "content": "搜尋條件",
-                                "link": {"url": search_url}
-                            },
-                            "annotations": {"color": "blue", "underline": True}
-                        },
-                        {
-                            "type": "text",
-                            "text": {"content": f"：新北市{district_name}區 | 華廈/大樓 | 3000萬以下 | 陽台20坪+ | 3-5房"}
-                        }
-                    ],
-                    "icon": {"emoji": "🎯"}
-                }
-            })
-            
-            # 摘要統計
-            total_count = len(properties)
-            if total_count > 0:
-                prices = [p['price'] for p in properties if p.get('price', 0) > 0]
-                if prices:
-                    avg_price = sum(prices) / len(prices)
-                    min_price = min(prices)
-                    max_price = max(prices)
-                    
-                    summary_text = f"""找到物件：{total_count} 筆
-平均價格：{avg_price:,.0f} 萬元
-價格區間：{min_price:,} - {max_price:,} 萬元"""
-                    
-                    if comparison_data:
-                        summary_text += f"\n{comparison_data.get('message', '')}"
-                    
-                    content_blocks.append({
-                        "object": "block",
-                        "type": "callout",
-                        "callout": {
-                            "rich_text": [
-                                {
-                                    "type": "text",
-                                    "text": {"content": summary_text}
-                                }
-                            ],
-                            "icon": {"emoji": "📊"}
-                        }
-                    })
-            
-            # 如果有新增物件，先顯示
-            if comparison_data and comparison_data.get('new_properties'):
-                new_properties = comparison_data['new_properties']
-                content_blocks.append({
-                    "object": "block",
-                    "type": "heading_2",
-                    "heading_2": {
-                        "rich_text": [
-                            {
-                                "type": "text",
-                                "text": {"content": f"🆕 新增物件 ({len(new_properties)} 個)"}
-                            }
-                        ]
-                    }
-                })
-                
-                for i, prop in enumerate(new_properties[:5], 1):  # 只顯示前5個
-                    title_text = prop.get('title', '未知物件')
-                    if len(title_text) > 50:
-                        title_text = title_text[:50] + "..."
-                    
-                    detail_text = f"""地址：{prop.get('address', '未知地址')[:30]}
-總價：{prop.get('price', 0):,.0f} 萬元
-房型：{prop.get('room_count', 3)}房{prop.get('living_room_count', 2)}廳{prop.get('bathroom_count', 2)}衛
-坪數：{prop.get('size', 0):.1f} 坪
-樓層：{prop.get('floor', '未知')}"""
-                    
-                    content_blocks.append({
-                        "object": "block",
-                        "type": "callout",
-                        "callout": {
-                            "rich_text": [
-                                {
-                                    "type": "text",
-                                    "text": {"content": f"{i}. {title_text}"}
-                                },
-                                {"type": "text", "text": {"content": "\n"}},
-                                {
-                                    "type": "text",
-                                    "text": {"content": detail_text}
-                                },
-                                {"type": "text", "text": {"content": "\n🔗 "}},
-                                {
-                                    "type": "text",
-                                    "text": {"content": "查看詳情", "link": {"url": prop.get('source_url', '')}},
-                                    "annotations": {"color": "blue"}
-                                }
-                            ],
-                            "icon": {"emoji": "🆕"}
-                        }
-                    })
-            
-            # 全部物件表格
-            content_blocks.append({
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {
-                    "rich_text": [
-                        {
-                            "type": "text",
-                            "text": {"content": "🏠 完整物件清單"}
-                        }
-                    ]
-                }
-            })
-            
-            # 建立表格
-            table_rows = []
-            
-            # 表格標題行
-            table_rows.append({
-                "type": "table_row",
-                "table_row": {
-                    "cells": [
-                        [{"type": "text", "text": {"content": "物件名稱"}}],
-                        [{"type": "text", "text": {"content": "總價(萬)"}}],
-                        [{"type": "text", "text": {"content": "房型"}}],
-                        [{"type": "text", "text": {"content": "坪數"}}],
-                        [{"type": "text", "text": {"content": "樓層"}}],
-                        [{"type": "text", "text": {"content": "連結"}}]
-                    ]
-                }
-            })
-            
-            # 物件數據行（限制在99行以內，因為還有標題行）
-            max_rows = 99  # Notion 表格最大限制是 100 行，其中 1 行是標題
-            displayed_properties = properties[:max_rows]
-            
-            for prop in displayed_properties:
-                # 清理標題
-                title_text = prop.get('title', '未知物件')
-                if len(title_text) > 25:
-                    title_text = title_text[:25] + "..."
-                
-                # 房型
-                room_info = f"{prop.get('room_count', 3)}房{prop.get('living_room_count', 2)}廳{prop.get('bathroom_count', 2)}衛"
-                
-                # 連結
-                source_url = prop.get('source_url', '')
-                
-                table_rows.append({
-                    "type": "table_row",
-                    "table_row": {
-                        "cells": [
-                            [{"type": "text", "text": {"content": title_text}}],
-                            [{"type": "text", "text": {"content": f"{prop.get('price', 0):,.0f}"}}],
-                            [{"type": "text", "text": {"content": room_info}}],
-                            [{"type": "text", "text": {"content": f"{prop.get('size', 0):.1f}"}}],
-                            [{"type": "text", "text": {"content": prop.get('floor', '')}}],
-                            [{"type": "text", "text": {"content": "連結", "link": {"url": source_url}}, "annotations": {"color": "blue"}}] if source_url else [{"type": "text", "text": {"content": "-"}}]
-                        ]
-                    }
-                })
-            
-            # 如果有超過限制的物件，添加說明
-            if len(properties) > max_rows:
-                remaining_count = len(properties) - max_rows
-                content_blocks.append({
-                    "object": "block",
-                    "type": "callout",
-                    "callout": {
-                        "rich_text": [
-                            {
-                                "type": "text",
-                                "text": {"content": f"⚠️ 因 Notion 表格限制，此處僅顯示前 {max_rows} 個物件，另外還有 {remaining_count} 個物件請參考本地檔案。"}
-                            }
-                        ],
-                        "icon": {"emoji": "⚠️"}
-                    }
-                })
-            
-            # 加入表格
-            content_blocks.append({
-                "object": "block",
-                "type": "table",
-                "table": {
-                    "table_width": 6,
-                    "has_column_header": True,
-                    "children": table_rows
-                }
-            })
-            
-            # 4. 在父頁面下創建新筆記
-            page_url = client.try_create_in_existing_page(parent_page_id, title, content_blocks)
-            if page_url:
-                print(f"✅ 成功創建頁面: {page_url}")
-                return True
-            else:
-                print("❌ 頁面創建失敗")
-                return False
-                
-        except Exception as e:
-            print(f"❌ 創建內容錯誤: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return False
-
+    def _get_district_key(self) -> str:
+        """獲取區域的英文鍵值"""
+        district_map = {
+            '蘆洲': 'luzhou',
+            '三重': 'sanchong',
+            '台北': 'taipei'
+        }
+        return district_map.get(self.district_config['name'], 'unknown')
 
 def main():
     """主程式"""
