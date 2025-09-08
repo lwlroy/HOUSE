@@ -1,0 +1,65 @@
+name: Daily House Crawler (Repository Storage)
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # 每天台灣時間早上 9:00
+  workflow_dispatch:
+
+jobs:
+  crawl-houses:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 獲取完整歷史，包含資料檔案
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Create data directory
+      run: |
+        mkdir -p data
+        mkdir -p logs
+    
+    - name: Run crawler
+      env:
+        NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+      run: |
+        python simple_luzhou_crawler.py --district all
+    
+    - name: Commit and push data
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Bot"
+        
+        # 添加新的資料檔案
+        git add data/
+        git add logs/ || true
+        
+        # 檢查是否有變更
+        if ! git diff --staged --quiet; then
+          git commit -m "📊 Daily house data update $(date +%Y-%m-%d)"
+          git push
+        else
+          echo "No changes to commit"
+        fi
+    
+    - name: Clean old data files (keep last 7 days)
+      run: |
+        # 清理超過 7 天的資料檔案
+        find data/ -name "*.json" -type f -mtime +7 -delete || true
+        
+        # 如果有刪除檔案，提交變更
+        if ! git diff --quiet; then
+          git add data/
+          git commit -m "🧹 Clean old data files" || true
+          git push || true
+        fi

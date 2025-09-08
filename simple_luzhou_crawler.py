@@ -610,64 +610,177 @@ class SimpleSinyiCrawler:
         return json_filename
     
     def load_previous_data(self) -> List[Dict[str, Any]]:
-        """載入前一天的資料用於比較"""
-        yesterday = datetime.now() - timedelta(days=1)
-        yesterday_str = yesterday.strftime('%Y%m%d')
+        """載入前一天的資料用於比較（支援 GitHub Actions）"""
+        # 優先檢查 GitHub Actions 下載的前一天資料
+        previous_data_dirs = ["./previous_data", "data"]
         
-        # 尋找昨天的檔案
-        data_dir = "data"
-        if not os.path.exists(data_dir):
-            return []
+        for data_dir in previous_data_dirs:
+            if not os.path.exists(data_dir):
+                continue
+                
+            print(f"🔍 在 {data_dir} 目錄中搜尋前一天的資料...")
+            
+            # 如果是 previous_data 目錄（GitHub Actions 下載的），直接尋找對應區域檔案
+            if data_dir == "./previous_data":
+                filename_prefix = f"{self.current_district}_houses"
+                for filename in os.listdir(data_dir):
+                    if filename.startswith(filename_prefix) and filename.endswith('.json'):
+                        filepath = os.path.join(data_dir, filename)
+                        try:
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                                print(f"📂 從 GitHub Actions artifacts 載入前一天資料: {len(data)} 個物件")
+                                return data
+                        except Exception as e:
+                            print(f"❌ 載入前一天資料失敗: {str(e)}")
+            else:
+                # 原本的邏輯：尋找昨天日期的檔案
+                yesterday = datetime.now() - timedelta(days=1)
+                yesterday_str = yesterday.strftime('%Y%m%d')
+                filename_prefix = f"{self.current_district}_houses"
+                
+                for filename in os.listdir(data_dir):
+                    if filename.startswith(f"{filename_prefix}_{yesterday_str}") and filename.endswith('.json'):
+                        filepath = os.path.join(data_dir, filename)
+                        try:
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                                print(f"📂 載入昨天的資料: {len(data)} 個物件")
+                                return data
+                        except Exception as e:
+                            print(f"❌ 載入昨天資料失敗: {str(e)}")
         
-        filename_prefix = f"{self.current_district}_houses"
-        for filename in os.listdir(data_dir):
-            if filename.startswith(f"{filename_prefix}_{yesterday_str}") and filename.endswith('.json'):
-                filepath = os.path.join(data_dir, filename)
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        print(f"📂 載入昨天的資料: {len(data)} 個物件")
-                        return data
-                except Exception as e:
-                    print(f"❌ 載入昨天資料失敗: {str(e)}")
-        
-        print("📂 未找到昨天的資料")
+        print("📂 未找到前一天的資料")
         return []
     
     def compare_with_previous(self, current_properties: List[Dict[str, Any]], previous_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """與前一天的資料比較"""
+        """與前一天的資料比較（增強版）"""
         if not previous_data:
             return {
+                'has_previous_data': False,
                 'new_properties': current_properties,
+                'removed_properties': [],
+                'price_changed_properties': [],
+                'unchanged_properties': [],
                 'total_new': len(current_properties),
+                'total_removed': 0,
+                'total_price_changed': 0,
+                'current_count': len(current_properties),
+                'previous_count': 0,
                 'message': '首次爬取，所有物件都是新的'
             }
         
-        # 建立昨天的物件ID集合
-        previous_ids = {prop.get('object_id', prop.get('id', '')) for prop in previous_data}
+        # 建立昨天的物件映射 (使用地址+房型+坪數作為 key)
+        previous_map = {}
+        for prop in previous_data:
+            key = self._generate_property_key(prop)
+            previous_map[key] = prop
+        
+        # 建立今天的物件映射
+        current_map = {}
+        for prop in current_properties:
+            key = self._generate_property_key(prop)
+            current_map[key] = prop
         
         # 找出新增的物件
         new_properties = []
-        for prop in current_properties:
-            if prop['object_id'] not in previous_ids:
-                new_properties.append(prop)
+        unchanged_properties = []
+        price_changed_properties = []
+        
+        for key, current_prop in current_map.items():
+            if key not in previous_map:
+                # 新增的物件
+                new_properties.append(current_prop)
+            else:
+                # 存在的物件，檢查價格是否變動
+                previous_prop = previous_map[key]
+                current_price = current_prop.get('price', 0)
+                previous_price = previous_prop.get('price', 0)
+                
+                if abs(current_price - previous_price) > 0:  # 價格有變動
+                    price_changed_properties.append({
+                        'property': current_prop,
+                        'old_price': previous_price,
+                        'new_price': current_price,
+                        'change': current_price - previous_price
+                    })
+                else:
+                    # 價格無變動的物件
+                    unchanged_properties.append(current_prop)
+        
+        # 找出下架的物件
+        removed_properties = []
+        for key, previous_prop in previous_map.items():
+            if key not in current_map:
+                removed_properties.append(previous_prop)
+        
+        # 計算變化
+        change = len(current_properties) - len(previous_data)
         
         return {
+            'has_previous_data': True,
             'new_properties': new_properties,
+            'removed_properties': removed_properties,
+            'price_changed_properties': price_changed_properties,
+            'unchanged_properties': unchanged_properties,
             'total_new': len(new_properties),
-            'total_current': len(current_properties),
-            'total_previous': len(previous_data),
-            'message': f'與昨天比較：新增 {len(new_properties)} 個物件'
+            'total_removed': len(removed_properties),
+            'total_price_changed': len(price_changed_properties),
+            'current_count': len(current_properties),
+            'previous_count': len(previous_data),
+            'change': change,
+            'message': f'與昨天比較：新增 {len(new_properties)} 個、下架 {len(removed_properties)} 個、變價 {len(price_changed_properties)} 個物件'
         }
     
+    def _generate_property_key(self, prop: Dict[str, Any]) -> str:
+        """生成物件的唯一識別鍵"""
+        address = prop.get('address', '').strip()
+        room_count = prop.get('room_count', 0)
+        size = prop.get('size', 0)
+        main_area = prop.get('main_area', size)
+        
+        # 使用地址、房數、坪數作為唯一識別
+        return f"{address}_{room_count}_{main_area}"
+    
     def upload_to_notion_simple(self, properties: List[Dict[str, Any]], comparison_data: Dict = None) -> bool:
-        """嘗試上傳到 Notion（新層級結構）"""
+        """嘗試上傳到 Notion（只上傳新增和變動的物件）"""
         notion_token = os.getenv('NOTION_API_TOKEN', os.getenv('NOTION_TOKEN'))
         
         if not notion_token:
             print("⚠️  未設定 NOTION_API_TOKEN，跳過 Notion 上傳")
             print("💡 請設定環境變數或執行 setup_notion.py")
             return False
+        
+        # 決定要上傳的物件
+        if comparison_data and comparison_data.get('has_previous_data'):
+            # 如果有前一天資料，只上傳新增和價格變動的物件
+            properties_to_upload = []
+            
+            # 新增的物件
+            if comparison_data.get('new_properties'):
+                properties_to_upload.extend(comparison_data['new_properties'])
+                print(f"📝 將上傳 {len(comparison_data['new_properties'])} 個新增物件")
+            
+            # 價格變動的物件
+            if comparison_data.get('price_changed_properties'):
+                for change_info in comparison_data['price_changed_properties']:
+                    prop = change_info['property'].copy()
+                    # 在標題中標註價格變動
+                    change_amount = change_info['change']
+                    change_emoji = "📈" if change_amount > 0 else "📉"
+                    prop['title'] = f"{prop['title']} {change_emoji} 價格變動: {change_info['old_price']:,}→{change_info['new_price']:,}萬"
+                    properties_to_upload.append(prop)
+                print(f"📝 將上傳 {len(comparison_data['price_changed_properties'])} 個價格變動物件")
+            
+            if not properties_to_upload:
+                print("✅ 沒有新增或變動的物件，Notion 筆記保持不變")
+                return True
+                
+            print(f"📝 總共上傳 {len(properties_to_upload)} 個有變化的物件到 Notion")
+        else:
+            # 如果沒有前一天資料，上傳所有物件
+            properties_to_upload = properties
+            print(f"📝 首次執行，將上傳所有 {len(properties)} 個物件到 Notion")
         
         try:
             # 嘗試匯入 Notion 功能
@@ -684,7 +797,7 @@ class SimpleSinyiCrawler:
             
             # 將字典資料轉換為 Property 對象
             property_objects = []
-            for i, prop_dict in enumerate(properties):
+            for i, prop_dict in enumerate(properties_to_upload):
                 try:
                     # 生成唯一 ID
                     prop_id = f"{self.district_config['name']}_{i+1}_{prop_dict.get('title', '')[:10]}"
@@ -702,7 +815,7 @@ class SimpleSinyiCrawler:
                         size=prop_dict.get('size', 0),
                         floor=str(prop_dict.get('floor', '')),
                         source_site="信義房屋",
-                        source_url=prop_dict.get('url', ''),
+                        source_url=prop_dict.get('source_url', ''),
                         property_type='sale'  # 買屋
                     )
                     
@@ -730,12 +843,12 @@ class SimpleSinyiCrawler:
             today = datetime.now()
             district_name = self._get_district_key()  # 獲取英文區域名稱
             
-            # 使用新的區域物件清單創建方法
+            # 使用新的區域物件清單創建方法，傳入比較資料
             success = client.create_district_house_list(
                 properties=property_objects,
                 search_date=today,
                 district_name=district_name,
-                comparison=None  # 暫時不提供比較資料
+                comparison=comparison_data  # 傳入比較資料
             )
             
             if success:
@@ -821,12 +934,55 @@ def main():
             # 6. 總結
             print(f"\n📊 {crawler.district_config['name']}區爬取總結:")
             print(f"  • 今天找到物件: {len(properties)} 個")
-            print(f"  • 新增物件: {comparison['total_new']} 個")
-            print(f"  • 本地檔案: {json_file}")
-            print(f"  • Notion上傳: {'✅ 成功' if success else '❌ 失敗'}")
             
-            if comparison['new_properties']:
-                print(f"\n💡 發現 {len(comparison['new_properties'])} 個新物件！")
+            if comparison['has_previous_data']:
+                print(f"  • 昨天物件數量: {comparison['total_previous']} 個")
+                print(f"  • 🆕 新增物件: {comparison['total_new']} 個")
+                print(f"  • 📤 下架物件: {comparison['total_removed']} 個")
+                print(f"  • 💰 變價物件: {comparison['total_price_changed']} 個")
+                
+                # 顯示淨變化
+                net_change = comparison.get('change', 0)
+                if net_change > 0:
+                    print(f"  • 📈 淨增加: +{net_change} 個")
+                elif net_change < 0:
+                    print(f"  • 📉 淨減少: {abs(net_change)} 個")
+                else:
+                    print(f"  • ➡️ 數量無變化")
+            else:
+                print(f"  • 🆕 新增物件: {comparison['total_new']} 個 (首次執行)")
+            
+            print(f"  • 📁 本地檔案: {json_file}")
+            print(f"  • 🔗 Notion上傳: {'✅ 成功' if success else '❌ 失敗'}")
+            
+            # 顯示重點物件
+            if comparison.get('new_properties'):
+                print(f"\n💡 🆕 新增物件預覽 (共 {len(comparison['new_properties'])} 個):")
+                for i, prop in enumerate(comparison['new_properties'][:3], 1):  # 只顯示前3個
+                    print(f"  {i}. {prop['title'][:30]}... - {prop['price']}萬元")
+                    print(f"     � {prop['address']}")
+                    print(f"     🔗 {prop['source_url']}")
+                
+                if len(comparison['new_properties']) > 3:
+                    print(f"     ... 及其他 {len(comparison['new_properties']) - 3} 個")
+            
+            if comparison.get('price_changed_properties'):
+                print(f"\n💰 變價物件預覽 (共 {len(comparison['price_changed_properties'])} 個):")
+                for i, change_info in enumerate(comparison['price_changed_properties'][:2], 1):  # 只顯示前2個
+                    prop = change_info['property']
+                    old_price = change_info['old_price']
+                    new_price = change_info['new_price']
+                    change_amount = change_info['change']
+                    
+                    change_symbol = "📈" if change_amount > 0 else "📉"
+                    change_text = f"+{change_amount}" if change_amount > 0 else str(change_amount)
+                    
+                    print(f"  {i}. {prop['title'][:30]}...")
+                    print(f"     💰 {old_price} → {new_price} 萬元 ({change_symbol} {change_text})")
+                    print(f"     📍 {prop['address']}")
+                
+                if len(comparison['price_changed_properties']) > 2:
+                    print(f"     ... 及其他 {len(comparison['price_changed_properties']) - 2} 個")
                 
         except KeyboardInterrupt:
             print(f"\n⏹️  使用者中斷執行")

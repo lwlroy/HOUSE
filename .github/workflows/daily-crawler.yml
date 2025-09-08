@@ -1,0 +1,68 @@
+name: Daily House Crawler
+
+on:
+  schedule:
+    # 每天台灣時間早上 9:00 執行 (UTC+8, 所以 UTC 時間是 01:00)
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  crawl-houses:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Download previous day data
+      uses: actions/download-artifact@v4
+      with:
+        name: house-data
+        path: ./previous_data/
+      continue-on-error: true  # 第一次執行時沒有前一天的資料
+    
+    - name: List previous data (for debugging)
+      run: |
+        if [ -d "./previous_data" ]; then
+          echo "✅ Previous data found:"
+          ls -la ./previous_data/
+        else
+          echo "⚠️ No previous data available (first run)"
+        fi
+    
+    - name: Run crawler
+      env:
+        NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+      run: |
+        python simple_luzhou_crawler.py --district all
+    
+    - name: List current data (for debugging)
+      run: |
+        if [ -d "./data" ]; then
+          echo "📁 Current data generated:"
+          ls -la ./data/
+        fi
+    
+    - name: Upload current data as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: house-data
+        path: ./data/
+        retention-days: 3  # 保留 3 天的資料，足夠做前一天比較
+    
+    - name: Show execution summary
+      run: |
+        echo "🎉 House crawler execution completed!"
+        echo "📊 Check Notion for updated house listings"
+        if [ -d "logs" ]; then
+          echo "📝 Logs available in logs/ directory"
+        fi
