@@ -24,19 +24,24 @@ jobs:
         pip install -r requirements.txt
     
     - name: Download previous day data
-      uses: actions/download-artifact@v4
+      uses: dawidd6/action-download-artifact@v3
       with:
+        workflow: daily-crawler.yml
         name: house-data
         path: ./previous_data/
-      continue-on-error: true  # 第一次執行時沒有前一天的資料
+        if_no_artifact_found: ignore  # 第一次執行時沒有前一天的資料
+      continue-on-error: true
     
     - name: List previous data (for debugging)
       run: |
+        echo "🔍 檢查前一天資料下載結果："
         if [ -d "./previous_data" ]; then
-          echo "✅ Previous data found:"
+          echo "✅ Previous data directory found:"
           ls -la ./previous_data/
+          echo "📄 檔案詳細資訊："
+          find ./previous_data -name "*.json" -exec echo "📋 {}" \; -exec wc -l {} \;
         else
-          echo "⚠️ No previous data available (first run)"
+          echo "⚠️ No previous data directory (first run or download failed)"
         fi
     
     - name: Run crawler
