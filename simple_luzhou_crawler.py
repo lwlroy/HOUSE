@@ -614,41 +614,61 @@ class SimpleSinyiCrawler:
         # 優先檢查 GitHub Actions 下載的前一天資料
         previous_data_dirs = ["./previous_data", "data"]
         
+        print(f"🔍 正在搜尋前一天的資料...")
+        print(f"  • 目標區域: {self.current_district}")
+        print(f"  • 搜尋目錄: {previous_data_dirs}")
+        
         for data_dir in previous_data_dirs:
             if not os.path.exists(data_dir):
+                print(f"  ❌ {data_dir} 目錄不存在")
                 continue
                 
-            print(f"🔍 在 {data_dir} 目錄中搜尋前一天的資料...")
+            print(f"  🔍 在 {data_dir} 目錄中搜尋前一天的資料...")
+            
+            # 列出目錄中的所有檔案
+            try:
+                files_in_dir = os.listdir(data_dir)
+                print(f"     📄 找到 {len(files_in_dir)} 個檔案: {files_in_dir}")
+            except Exception as e:
+                print(f"     ❌ 無法列出檔案: {e}")
+                continue
             
             # 如果是 previous_data 目錄（GitHub Actions 下載的），直接尋找對應區域檔案
             if data_dir == "./previous_data":
                 filename_prefix = f"{self.current_district}_houses"
-                for filename in os.listdir(data_dir):
+                print(f"     🎯 搜尋檔案前綴: {filename_prefix}")
+                
+                for filename in files_in_dir:
                     if filename.startswith(filename_prefix) and filename.endswith('.json'):
                         filepath = os.path.join(data_dir, filename)
+                        print(f"     ✅ 找到匹配檔案: {filename}")
                         try:
                             with open(filepath, 'r', encoding='utf-8') as f:
                                 data = json.load(f)
-                                print(f"📂 從 GitHub Actions artifacts 載入前一天資料: {len(data)} 個物件")
+                                print(f"     📂 從 GitHub Actions artifacts 載入前一天資料: {len(data)} 個物件")
                                 return data
                         except Exception as e:
-                            print(f"❌ 載入前一天資料失敗: {str(e)}")
+                            print(f"     ❌ 載入前一天資料失敗: {str(e)}")
             else:
                 # 原本的邏輯：尋找昨天日期的檔案
                 yesterday = datetime.now() - timedelta(days=1)
                 yesterday_str = yesterday.strftime('%Y%m%d')
                 filename_prefix = f"{self.current_district}_houses"
+                target_pattern = f"{filename_prefix}_{yesterday_str}"
                 
-                for filename in os.listdir(data_dir):
-                    if filename.startswith(f"{filename_prefix}_{yesterday_str}") and filename.endswith('.json'):
+                print(f"     🎯 搜尋昨天日期檔案模式: {target_pattern}*.json")
+                
+                for filename in files_in_dir:
+                    if filename.startswith(target_pattern) and filename.endswith('.json'):
                         filepath = os.path.join(data_dir, filename)
+                        print(f"     ✅ 找到昨天的檔案: {filename}")
                         try:
                             with open(filepath, 'r', encoding='utf-8') as f:
                                 data = json.load(f)
-                                print(f"📂 載入昨天的資料: {len(data)} 個物件")
+                                print(f"     📂 載入昨天的資料: {len(data)} 個物件")
                                 return data
                         except Exception as e:
-                            print(f"❌ 載入昨天資料失敗: {str(e)}")
+                            print(f"     ❌ 載入昨天資料失敗: {str(e)}")
         
         print("📂 未找到前一天的資料")
         return []
@@ -750,6 +770,17 @@ class SimpleSinyiCrawler:
             print("⚠️  未設定 NOTION_API_TOKEN，跳過 Notion 上傳")
             print("💡 請設定環境變數或執行 setup_notion.py")
             return False
+        
+        # 調試：顯示比較資料的詳細資訊
+        print(f"\n🔍 比較資料調試資訊:")
+        if comparison_data:
+            print(f"  • has_previous_data: {comparison_data.get('has_previous_data', False)}")
+            print(f"  • 新增物件數量: {len(comparison_data.get('new_properties', []))}")
+            print(f"  • 價格變動物件數量: {len(comparison_data.get('price_changed_properties', []))}")
+            print(f"  • 總計目前物件: {comparison_data.get('current_count', 0)}")
+            print(f"  • 總計前一天物件: {comparison_data.get('previous_count', 0)}")
+        else:
+            print(f"  • comparison_data 為 None")
         
         # 決定要上傳的物件
         if comparison_data and comparison_data.get('has_previous_data'):
@@ -936,7 +967,7 @@ def main():
             print(f"  • 今天找到物件: {len(properties)} 個")
             
             if comparison['has_previous_data']:
-                print(f"  • 昨天物件數量: {comparison['total_previous']} 個")
+                print(f"  • 昨天物件數量: {comparison['previous_count']} 個")
                 print(f"  • 🆕 新增物件: {comparison['total_new']} 個")
                 print(f"  • 📤 下架物件: {comparison['total_removed']} 個")
                 print(f"  • 💰 變價物件: {comparison['total_price_changed']} 個")
