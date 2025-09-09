@@ -452,9 +452,9 @@ class FullNotionClient:
             return "未命名頁面"
     
     def _generate_district_blocks(self, properties: List[Property], search_date: datetime, district_name: str, comparison: Dict = None) -> List[Dict]:
-        """生成區域物件清單的 Notion 頁面內容塊（優化版：只顯示有變化的物件）"""
+        """生成區域物件清單的 Notion 頁面內容塊（增強版：支援無變更情況顯示）"""
         try:
-            from .notion_blocks_patch import generate_optimized_district_blocks
+            from .notion_blocks_enhanced import generate_optimized_district_blocks
             return generate_optimized_district_blocks(properties, search_date, district_name, comparison)
         except ImportError:
             # 如果導入失敗，使用原始版本

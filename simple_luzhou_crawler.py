@@ -950,6 +950,30 @@ def main():
             comparison = crawler.compare_with_previous(properties, previous_data)
             print(f"📈 {comparison['message']}")
             
+            # 特別針對台北區域增加詳細調試
+            if district == 'taipei':
+                print(f"\n🔍 台北區域詳細比較資訊:")
+                print(f"  • has_previous_data: {comparison.get('has_previous_data', False)}")
+                print(f"  • 前一天物件數: {comparison.get('previous_count', 0)}")
+                print(f"  • 今天物件數: {comparison.get('current_count', 0)}")
+                print(f"  • 新增物件數: {comparison.get('total_new', 0)}")
+                print(f"  • 下架物件數: {comparison.get('total_removed', 0)}")
+                print(f"  • 變價物件數: {comparison.get('total_price_changed', 0)}")
+                
+                if comparison.get('new_properties'):
+                    print(f"  🆕 新增物件範例:")
+                    for i, prop in enumerate(comparison['new_properties'][:3], 1):
+                        print(f"    {i}. {prop['title'][:30]}... - {prop['price']}萬")
+                
+                if comparison.get('price_changed_properties'):
+                    print(f"  💰 變價物件範例:")
+                    for i, change in enumerate(comparison['price_changed_properties'][:2], 1):
+                        prop = change['property']
+                        print(f"    {i}. {prop['title'][:30]}... : {change['old_price']} → {change['new_price']}萬")
+                
+                if not comparison.get('new_properties') and not comparison.get('price_changed_properties'):
+                    print(f"  ✅ 台北區域今天沒有新增或變價物件")
+            
             if comparison['new_properties']:
                 print("\n🆕 新增的物件:")
                 for i, prop in enumerate(comparison['new_properties'][:5], 1):  # 只顯示前5個
