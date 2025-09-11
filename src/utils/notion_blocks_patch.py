@@ -1,6 +1,6 @@
 """
 Notion 區塊數量限制修復補丁
-解決 "body.children.length should be ≤ 100" 錯誤
+解決 "body.child                    "text": {"content": f"🏠 {district_display}區{property_type}搜尋結果"}en.length should be ≤ 100" 錯誤
 """
 
 from typing import List, Dict
@@ -14,7 +14,18 @@ def generate_optimized_district_blocks(properties: List[Property], search_date: 
     blocks = []
     
     # 1. 標題和基本資訊 (3個區塊)
-    property_type = "公寓" if district_name == '台北' else "華廈大樓"
+    if district_name in ['sanchong_luzhou', 'sanchongluzhou']:
+        district_display = "三重蘆洲"
+        property_type = "華廈大樓"
+        search_url = "https://www.sinyi.com.tw/buy/list/3000-down-price/dalou-huaxia-type/20-up-balconyarea/3-5-roomtotal/NewTaipei-city/241-247-zip/default-desc/1"
+    elif district_name == '台北':
+        district_display = "台北"
+        property_type = "公寓"
+        search_url = "https://www.sinyi.com.tw/buy/list/3000-down-price/apartment-type/20-up-balconyarea/3-5-roomtotal/1-3-floor/Taipei-city/100-103-104-105-106-108-110-115-zip/default-desc/1"
+    else:
+        district_display = district_name
+        property_type = "華廈大樓"
+        search_url = "https://www.sinyi.com.tw"
     
     blocks.append({
         "object": "block",
@@ -39,6 +50,28 @@ def generate_optimized_district_blocks(properties: List[Property], search_date: 
                     "text": {"content": f"📅 搜尋日期：{search_date.strftime('%Y年%m月%d日')}"}
                 }
             ]
+        }
+    })
+    
+    blocks.append({
+        "object": "block",
+        "type": "callout",
+        "callout": {
+            "rich_text": [
+                {
+                    "type": "text",
+                    "text": {"content": f"🎯 搜尋條件：{district_display}區 | {property_type} | 20坪+ | 3-5房 | 3000萬內 "},
+                },
+                {
+                    "type": "text",
+                    "text": {
+                        "content": "點擊查看搜尋頁面",
+                        "link": {"url": search_url}
+                    },
+                    "annotations": {"color": "blue", "underline": True}
+                }
+            ],
+            "icon": {"emoji": "🎯"}
         }
     })
     

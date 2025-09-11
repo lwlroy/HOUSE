@@ -731,7 +731,8 @@ class FullNotionClient:
         urls = {
             '蘆洲': 'https://www.sinyi.com.tw/buy/list/3000-down-price/apartment-type/20-up-balconyarea/3-5-roomtotal/1-3-floor/Luzhou-dist/default-desc/1',
             '三重': 'https://www.sinyi.com.tw/buy/list/3000-down-price/apartment-type/20-up-balconyarea/3-5-roomtotal/1-3-floor/Sanchong-dist/default-desc/1',
-            '台北': 'https://www.sinyi.com.tw/buy/list/3000-down-price/apartment-type/20-up-balconyarea/3-5-roomtotal/1-3-floor/Taipei-city/100-103-104-105-106-108-110-115-zip/default-desc/1'
+            '台北': 'https://www.sinyi.com.tw/buy/list/3000-down-price/apartment-type/20-up-balconyarea/3-5-roomtotal/1-3-floor/Taipei-city/100-103-104-105-106-108-110-115-zip/default-desc/1',
+            '三重蘆洲': 'https://www.sinyi.com.tw/buy/list/3000-down-price/dalou-huaxia-type/20-up-balconyarea/3-5-roomtotal/NewTaipei-city/241-247-zip/default-desc/1'
         }
         return urls.get(district_name, 'https://www.sinyi.com.tw')
 
