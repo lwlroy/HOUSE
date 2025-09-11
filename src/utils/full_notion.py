@@ -454,7 +454,7 @@ class FullNotionClient:
     def _generate_district_blocks(self, properties: List[Property], search_date: datetime, district_name: str, comparison: Dict = None) -> List[Dict]:
         """生成區域物件清單的 Notion 頁面內容塊（增強版：支援無變更情況顯示）"""
         try:
-            from .notion_blocks_enhanced import generate_optimized_district_blocks
+            from .notion_blocks_patch import generate_optimized_district_blocks
             return generate_optimized_district_blocks(properties, search_date, district_name, comparison)
         except ImportError:
             # 如果導入失敗，使用原始版本
@@ -581,8 +581,34 @@ class FullNotionClient:
             self._add_comparison_sections(blocks, comparison)
         
         # 物件詳情 - 需要分批處理，因為 Notion API 限制
-        max_properties_per_page = 20  # 每頁最多顯示 20 個物件，避免超過 Notion 100 個區塊限制
-        displayed_properties = properties[:max_properties_per_page]
+        # 計算目前已使用的區塊數量
+        current_block_count = len(blocks)
+        # Notion API 限制每次請求最多 100 個區塊，預留一些空間
+        remaining_capacity = 100 - current_block_count - 3  # 預留3個區塊給標題和說明
+        
+        # 每個物件需要2個區塊（標題 + 內容）
+        max_properties_per_page = min(remaining_capacity // 2, len(properties), 25)
+        
+        if max_properties_per_page <= 0:
+            # 如果空間不足，只顯示摘要
+            blocks.append({
+                "object": "block",
+                "type": "callout",
+                "callout": {
+                    "rich_text": [
+                        {
+                            "type": "text",
+                            "text": {"content": f"⚠️ 因 Notion 區塊數量限制，無法顯示物件詳情。總共找到 {len(properties)} 個物件，請查看本地 JSON 檔案獲取完整資料。"}
+                        }
+                    ],
+                    "icon": {"emoji": "⚠️"},
+                    "color": "yellow_background"
+                }
+            })
+            return blocks
+        
+        # 重新計算實際顯示的物件數量
+        actually_displayed = min(max_properties_per_page, len(properties))
         
         blocks.append({
             "object": "block",
@@ -591,13 +617,13 @@ class FullNotionClient:
                 "rich_text": [
                     {
                         "type": "text",
-                        "text": {"content": f"🏘️ {district_name}區物件詳情 (顯示前 {len(displayed_properties)} 個)"}
+                        "text": {"content": f"🏘️ {district_name}區物件詳情 (顯示前 {actually_displayed} 個)"}
                     }
                 ]
             }
         })
         
-        if len(properties) > max_properties_per_page:
+        if len(properties) > actually_displayed:
             blocks.append({
                 "object": "block",
                 "type": "callout",
@@ -605,14 +631,14 @@ class FullNotionClient:
                     "rich_text": [
                         {
                             "type": "text",
-                            "text": {"content": f"⚠️ 因頁面限制，此處僅顯示前 {max_properties_per_page} 個物件。總共找到 {len(properties)} 個物件，其餘物件請參考本地 JSON 檔案。"}
+                            "text": {"content": f"⚠️ 因頁面限制，此處僅顯示前 {actually_displayed} 個物件。總共找到 {len(properties)} 個物件，其餘物件請參考本地 JSON 檔案。"}
                         }
                     ],
                     "icon": {"emoji": "⚠️"}
                 }
             })
         
-        for i, prop in enumerate(displayed_properties, 1):
+        for i, prop in enumerate(properties[:actually_displayed], 1):
             # 檢查是否為新增物件
             is_new = False
             if comparison and comparison.get('new_properties'):

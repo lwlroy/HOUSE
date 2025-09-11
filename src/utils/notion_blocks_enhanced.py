@@ -350,13 +350,42 @@ def _add_search_summary(blocks: List[Dict], properties: List, district_name: str
     })
 
 def _add_property_list(blocks: List[Dict], properties: List[Dict]):
-    """添加物件列表"""
+    """添加物件列表（合併版本，避免超過 Notion 區塊限制）"""
     
-    for i, prop in enumerate(properties[:20], 1):  # 限制顯示前20個
+    # 計算可安全顯示的物件數量（每個物件2個區塊：標題+內容）
+    # 目前已有的區塊數量
+    current_blocks = len(blocks)
+    # 預留一些空間給其他區塊
+    remaining_capacity = 100 - current_blocks - 5
+    max_properties = min(remaining_capacity // 2, len(properties), 30)  # 每個物件最多2個區塊
+    
+    if max_properties <= 0:
+        # 如果空間不足，使用摘要模式
+        blocks.append({
+            "object": "block",
+            "type": "callout",
+            "callout": {
+                "rich_text": [
+                    {
+                        "type": "text",
+                        "text": {"content": f"⚠️ 因 Notion 區塊限制，無法顯示所有物件詳情。總共找到 {len(properties)} 個物件，請查看本地 JSON 檔案獲取完整資料。"}
+                    }
+                ],
+                "icon": {"emoji": "⚠️"},
+                "color": "yellow_background"
+            }
+        })
+        return
+    
+    for i, prop in enumerate(properties[:max_properties], 1):
         title = prop.get('title', 'Unknown Property')
         price = prop.get('price', 0)
         address = prop.get('address', 'Unknown Address')
         source_url = prop.get('source_url', '#')
+        room_count = prop.get('room_count', 0)
+        living_room_count = prop.get('living_room_count', 0)
+        bathroom_count = prop.get('bathroom_count', 0)
+        size = prop.get('size', 0)
         
         # 檢查是否有價格變動資訊
         price_change_info = prop.get('_price_change_info')
@@ -367,6 +396,7 @@ def _add_property_list(blocks: List[Dict], properties: List[Dict]):
             change_emoji = "📈" if change_amount > 0 else "📉"
             title = f"{title} {change_emoji} 價格變動: {old_price:,}→{new_price:,}萬"
         
+        # 物件標題
         blocks.append({
             "object": "block",
             "type": "heading_3",
@@ -374,59 +404,70 @@ def _add_property_list(blocks: List[Dict], properties: List[Dict]):
                 "rich_text": [
                     {
                         "type": "text",
-                        "text": {"content": f"{i}. {title[:60]}..."}
+                        "text": {"content": f"{i}. {title[:50]}{'...' if len(title) > 50 else ''}"}
                     }
                 ]
             }
         })
         
-        blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [
-                    {
-                        "type": "text",
-                        "text": {"content": f"💰 價格：{price:,} 萬元"}
-                    }
-                ]
-            }
-        })
+        # 合併所有物件資訊到單一區塊中
+        info_text = f"💰 價格：{price:,} 萬元\n📍 地址：{address}"
         
-        blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [
-                    {
-                        "type": "text",
-                        "text": {"content": f"📍 地址：{address}"}
-                    }
-                ]
-            }
-        })
+        if room_count and living_room_count and bathroom_count:
+            info_text += f"\n🏢 房型：{room_count}房{living_room_count}廳{bathroom_count}衛"
         
-        blocks.append({
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [
-                    {
-                        "type": "text",
-                        "text": {"content": "🔗 查看詳情："},
-                        "annotations": {"bold": True}
+        if size:
+            info_text += f"\n📐 坪數：{size} 坪"
+        
+        # 創建富文本內容，包含連結
+        rich_text_content = [
+            {
+                "type": "text",
+                "text": {"content": info_text}
+            }
+        ]
+        
+        # 添加連結
+        if source_url and source_url != '#':
+            rich_text_content.extend([
+                {
+                    "type": "text",
+                    "text": {"content": "\n🔗 查看詳情："}
+                },
+                {
+                    "type": "text",
+                    "text": {
+                        "content": "點擊前往",
+                        "link": {"url": source_url}
                     },
-                    {
-                        "type": "text",
-                        "text": {"content": source_url, "link": {"url": source_url}}
+                    "annotations": {
+                        "color": "blue",
+                        "underline": True
                     }
-                ]
-            }
-        })
+                }
+            ])
         
-        # 分隔線
         blocks.append({
             "object": "block",
-            "type": "divider",
-            "divider": {}
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": rich_text_content
+            }
+        })
+    
+    # 如果有更多物件未顯示，添加說明
+    if len(properties) > max_properties:
+        blocks.append({
+            "object": "block",
+            "type": "callout",
+            "callout": {
+                "rich_text": [
+                    {
+                        "type": "text",
+                        "text": {"content": f"📋 共找到 {len(properties)} 個物件，此處顯示前 {max_properties} 個。完整清單請查看本地 JSON 檔案。"}
+                    }
+                ],
+                "icon": {"emoji": "📋"},
+                "color": "blue_background"
+            }
         })
