@@ -94,7 +94,38 @@ jobs:
       env:
         NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
       run: |
-        python simple_luzhou_crawler.py --district all
+        echo "🚀 開始執行房屋爬蟲..."
+        echo "================================================"
+        
+        # 1. 執行三重蘆洲整合爬蟲
+        echo "🏠 執行三重蘆洲整合爬蟲..."
+        if python sanchong_luzhou_crawler.py; then
+          echo "✅ 三重蘆洲整合爬蟲執行成功"
+        else
+          echo "❌ 三重蘆洲整合爬蟲執行失敗"
+        fi
+        echo ""
+        
+        # 2. 執行台北公寓爬蟲
+        echo "🏢 執行台北公寓爬蟲..."
+        if python simple_luzhou_crawler.py --district taipei; then
+          echo "✅ 台北公寓爬蟲執行成功"
+        else
+          echo "❌ 台北公寓爬蟲執行失敗"
+        fi
+        echo ""
+        
+        # 3. 顯示所有生成的檔案
+        echo "📁 檢查生成的檔案："
+        if [ -d "./data" ]; then
+          ls -la ./data/
+        else
+          echo "❌ data 目錄不存在"
+        fi
+        echo ""
+        
+        echo "🎉 所有爬蟲執行完成！"
+        echo "================================================"
     
     - name: List current data (for debugging)
       run: |
