@@ -2,7 +2,8 @@ name: Daily House Crawler
 
 on:
   schedule:
-    - cron: '0 1 * * *'  # 每天台灣時間早上9點 (UTC+8)
+    # 設定為 UTC 00:30，對應台灣時間 08:30，考慮到 GitHub Actions 可能的延遲
+    - cron: '30 0 * * *'  # 每天 UTC 00:30 = 台灣時間早上 08:30 (UTC+8)
   workflow_dispatch:
 
 jobs:
@@ -10,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: 記錄開始時間
+      run: |
+        echo "🕐 GitHub Actions 開始執行時間: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "🕐 對應台灣時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
+    
     - name: Checkout code
       uses: actions/checkout@v4
     
@@ -34,12 +40,20 @@ jobs:
     - name: Run Sanchong Luzhou crawler
       env:
         NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
-      run: python sanchong_luzhou_crawler.py
+      run: |
+        echo "🏗️ 開始執行三重蘆洲華廈大樓爬蟲..."
+        echo "⏰ 開始時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
+        python sanchong_luzhou_crawler.py
+        echo "✅ 三重蘆洲爬蟲完成: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
     
     - name: 執行信義房屋台北公寓爬蟲
+      env:
+        NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
       run: |
         echo "🏠 開始爬取台北公寓物件..."
+        echo "⏰ 開始時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
         python taipei_crawler.py taipei
+        echo "✅ 台北公寓爬蟲完成: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
     
     - name: Upload current data
       uses: actions/upload-artifact@v4
@@ -47,3 +61,8 @@ jobs:
         name: house-data
         path: ./data/
         retention-days: 3
+    
+    - name: 記錄完成時間
+      run: |
+        echo "🎉 所有爬蟲執行完成!"
+        echo "🕐 完成時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
