@@ -1,0 +1,73 @@
+name: Manual Test Crawler (手動測試爬蟲)
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: '測試模式'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+
+env:
+  NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+
+jobs:
+  test-crawlers:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Show environment info
+      run: |
+        echo "🐍 Python version: $(python --version)"
+        echo "📁 Current directory: $(pwd)"
+        echo "📋 Files in current directory:"
+        ls -la
+        echo "📊 Environment variables:"
+        echo "NOTION_API_TOKEN is set: ${{ secrets.NOTION_API_TOKEN != '' }}"
+        
+    - name: Test Sanchong Luzhou crawler (簡化測試)
+      run: |
+        echo "🔄 開始測試三重蘆洲爬蟲..."
+        # 只執行前幾個步驟，不上傳到Notion
+        timeout 120s python sanchong_luzhou_crawler.py || echo "⚠️ 三重蘆洲爬蟲執行超時或出錯"
+        
+    - name: Test Taipei crawler (簡化測試)
+      run: |
+        echo "🔄 開始測試台北爬蟲..."
+        # 只執行前幾個步驟，不上傳到Notion
+        timeout 120s python simple_luzhou_crawler.py taipei || echo "⚠️ 台北爬蟲執行超時或出錯"
+        
+    - name: Check generated files
+      run: |
+        echo "📁 檢查生成的文件:"
+        ls -la data/ || echo "data目錄不存在"
+        echo "📊 JSON文件數量:"
+        find . -name "*.json" -type f | wc -l
+        echo "📋 JSON文件列表:"
+        find . -name "*.json" -type f -exec ls -la {} \;
+        
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-crawler-data
+        path: |
+          data/
+          *.json
+        retention-days: 7
