@@ -357,6 +357,23 @@ class TaipeiApartmentCrawler:
                 files = os.listdir(data_dir)
                 print(f"     📄 找到 {len(files)} 個檔案: {files}")
                 
+                # 如果是 previous_data 目錄（GitHub Actions 下載的），直接找台北檔案
+                if data_dir == "./previous_data":
+                    taipei_files = [f for f in files if f.startswith("taipei_houses_") and f.endswith('.json')]
+                    if taipei_files:
+                        # 取最新的檔案
+                        latest_file = sorted(taipei_files, reverse=True)[0]
+                        filepath = os.path.join(data_dir, latest_file)
+                        print(f"  ✅ 從 previous_data 找到台北檔案: {latest_file}")
+                        
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            print(f"  📊 載入 GitHub Actions 台北資料: {len(data)} 個物件")
+                            return data
+                    else:
+                        print(f"  ❌ 在 previous_data 中未找到台北檔案")
+                        continue
+                
                 # 搜尋昨天的檔案
                 yesterday = datetime.now() - timedelta(days=1)
                 yesterday_pattern = f"taipei_houses_{yesterday.strftime('%Y%m%d')}"

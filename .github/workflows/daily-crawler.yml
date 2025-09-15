@@ -37,6 +37,16 @@ jobs:
         if_no_artifact_found: ignore
       continue-on-error: true
     
+    - name: 檢查下載的資料
+      run: |
+        echo "🔍 檢查 previous_data 目錄內容:"
+        if [ -d "./previous_data" ]; then
+          ls -la ./previous_data/
+          echo "📄 找到 $(ls ./previous_data/ | wc -l) 個檔案"
+        else
+          echo "❌ previous_data 目錄不存在"
+        fi
+    
     - name: Run Sanchong Luzhou crawler
       env:
         NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}

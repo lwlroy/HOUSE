@@ -614,17 +614,26 @@ class SanchongLuzhouCrawler:
                 filename_prefix = "sanchong_luzhou_houses"
                 print(f"     🎯 搜尋檔案前綴: {filename_prefix}")
                 
+                # 尋找三重蘆洲的檔案
+                matching_files = []
                 for filename in files_in_dir:
                     if filename.startswith(filename_prefix) and filename.endswith('.json'):
-                        filepath = os.path.join(data_dir, filename)
-                        print(f"     ✅ 找到匹配檔案: {filename}")
-                        try:
-                            with open(filepath, 'r', encoding='utf-8') as f:
-                                data = json.load(f)
-                                print(f"     📂 從 GitHub Actions artifacts 載入前一天資料: {len(data)} 個物件")
-                                return data
-                        except Exception as e:
-                            print(f"     ❌ 載入前一天資料失敗: {str(e)}")
+                        matching_files.append(filename)
+                
+                if matching_files:
+                    # 取最新的檔案
+                    latest_file = sorted(matching_files, reverse=True)[0]
+                    filepath = os.path.join(data_dir, latest_file)
+                    print(f"     ✅ 找到三重蘆洲檔案: {latest_file}")
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            print(f"     📂 從 GitHub Actions artifacts 載入三重蘆洲資料: {len(data)} 個物件")
+                            return data
+                    except Exception as e:
+                        print(f"     ❌ 載入三重蘆洲資料失敗: {str(e)}")
+                else:
+                    print(f"     ❌ 在 previous_data 中未找到三重蘆洲檔案")
             else:
                 # 原本的邏輯：尋找昨天日期的檔案
                 yesterday = datetime.now() - timedelta(days=1)
