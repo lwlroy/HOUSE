@@ -375,6 +375,20 @@ class TaipeiApartmentCrawler:
                         data = json.load(f)
                         print(f"  📊 載入 {len(data)} 個前一天物件")
                         return data
+                else:
+                    # 如果找不到昨天的檔案，尋找最新的台北檔案
+                    taipei_files = [f for f in files if f.startswith("taipei_houses_") and f.endswith('.json')]
+                    if taipei_files:
+                        # 按檔名排序，取最新的
+                        taipei_files.sort(reverse=True)
+                        latest_file = taipei_files[0]
+                        filepath = os.path.join(data_dir, latest_file)
+                        print(f"  ✅ 找到最新的台北檔案: {latest_file}")
+                        
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            print(f"  📊 載入最新資料: {len(data)} 個物件")
+                            return data
                 
             except Exception as e:
                 print(f"  ❌ 讀取 {data_dir} 失敗: {str(e)}")

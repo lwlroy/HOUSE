@@ -645,6 +645,21 @@ class SanchongLuzhouCrawler:
                                 return data
                         except Exception as e:
                             print(f"     ❌ 載入昨天資料失敗: {str(e)}")
+                # 如果找不到昨天的檔案，尋找最新的三重蘆洲檔案
+                matching_files = [f for f in files_in_dir if f.startswith(filename_prefix) and f.endswith('.json')]
+                if matching_files:
+                    # 按檔名排序，取最新的
+                    matching_files.sort(reverse=True)
+                    latest_file = matching_files[0]
+                    filepath = os.path.join(data_dir, latest_file)
+                    print(f"     ✅ 找到最新的三重蘆洲檔案: {latest_file}")
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            print(f"     📂 載入最新資料: {len(data)} 個物件")
+                            return data
+                    except Exception as e:
+                        print(f"     ❌ 載入最新資料失敗: {str(e)}")
         
         print("📂 未找到前一天的資料")
         return []
@@ -792,9 +807,35 @@ class SanchongLuzhouCrawler:
                 print("❌ Notion API 連接失敗")
                 return False
             
+            # 只上傳有變化的物件（如果有前一天資料）
+            properties_to_upload = []
+            
+            if comparison_data and comparison_data.get('has_previous_data'):
+                # 新增物件
+                if comparison_data.get('new_properties'):
+                    properties_to_upload.extend(comparison_data['new_properties'])
+                
+                # 價格變動物件
+                if comparison_data.get('price_changed_properties'):
+                    for change_info in comparison_data['price_changed_properties']:
+                        prop = change_info['property'].copy()
+                        change_amount = change_info['change']
+                        change_emoji = "📈" if change_amount > 0 else "📉"
+                        prop['title'] = f"{prop['title']} {change_emoji} 價格變動: {change_info['old_price']:,}→{change_info['new_price']:,}萬"
+                        properties_to_upload.append(prop)
+                
+                if not properties_to_upload:
+                    print("✅ 沒有新增或變動的物件，Notion 筆記保持不變")
+                    return True
+            else:
+                # 首次執行，上傳所有物件
+                properties_to_upload = properties
+            
+            print(f"📝 準備上傳 {len(properties_to_upload)} 個物件到 Notion")
+            
             # 將字典資料轉換為 Property 對象
             property_objects = []
-            for i, prop_dict in enumerate(properties):
+            for i, prop_dict in enumerate(properties_to_upload):
                 try:
                     # 生成唯一 ID
                     prop_id = f"sanchong_luzhou_{i+1}_{prop_dict.get('title', '')[:10]}"
