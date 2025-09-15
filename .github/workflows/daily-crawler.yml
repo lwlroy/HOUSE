@@ -35,16 +35,34 @@ jobs:
         name: house-data
         path: ./previous_data/
         if_no_artifact_found: ignore
+        search_artifacts: true
+        workflow_conclusion: success
       continue-on-error: true
     
     - name: 檢查下載的資料
       run: |
         echo "🔍 檢查 previous_data 目錄內容:"
         if [ -d "./previous_data" ]; then
+          echo "✅ previous_data 目錄存在"
           ls -la ./previous_data/
-          echo "📄 找到 $(ls ./previous_data/ | wc -l) 個檔案"
+          echo "📄 找到 $(ls ./previous_data/ 2>/dev/null | wc -l) 個檔案"
+          
+          # 檢查三重蘆洲檔案
+          echo "🏗️ 三重蘆洲檔案:"
+          ls ./previous_data/sanchong_luzhou_houses_* 2>/dev/null || echo "❌ 沒有找到三重蘆洲檔案"
+          
+          # 檢查台北檔案  
+          echo "🏠 台北檔案:"
+          ls ./previous_data/taipei_houses_* 2>/dev/null || echo "❌ 沒有找到台北檔案"
         else
           echo "❌ previous_data 目錄不存在"
+        fi
+        
+        echo "🔍 檢查 data 目錄內容（當前執行的資料）:"
+        if [ -d "./data" ]; then
+          ls -la ./data/ 2>/dev/null || echo "data 目錄為空"
+        else
+          echo "❌ data 目錄不存在"
         fi
     
     - name: Run Sanchong Luzhou crawler
@@ -53,6 +71,28 @@ jobs:
       run: |
         echo "🏗️ 開始執行三重蘆洲華廈大樓爬蟲..."
         echo "⏰ 開始時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
+        
+        # 如果沒有 previous_data，嘗試創建一個模擬的前一天資料
+        if [ ! -d "./previous_data" ] || [ -z "$(ls -A ./previous_data/ 2>/dev/null)" ]; then
+          echo "⚠️ 沒有找到 previous_data，嘗試創建模擬的前一天資料..."
+          mkdir -p ./previous_data
+          
+          # 尋找 data 目錄中最舊的三重蘆洲檔案作為前一天資料
+          if [ -d "./data" ]; then
+            oldest_sanchong=$(ls ./data/sanchong_luzhou_houses_*.json 2>/dev/null | head -1)
+            if [ ! -z "$oldest_sanchong" ]; then
+              cp "$oldest_sanchong" ./previous_data/
+              echo "✅ 複製 $oldest_sanchong 作為前一天資料"
+            fi
+            
+            oldest_taipei=$(ls ./data/taipei_houses_*.json 2>/dev/null | head -1)  
+            if [ ! -z "$oldest_taipei" ]; then
+              cp "$oldest_taipei" ./previous_data/
+              echo "✅ 複製 $oldest_taipei 作為前一天資料"
+            fi
+          fi
+        fi
+        
         python sanchong_luzhou_crawler.py
         echo "✅ 三重蘆洲爬蟲完成: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
     
@@ -62,6 +102,19 @@ jobs:
       run: |
         echo "🏠 開始爬取台北公寓物件..."
         echo "⏰ 開始時間: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
+        
+        # 確保有台北的前一天資料
+        if [ ! -f "./previous_data/taipei_houses_"* ]; then
+          echo "⚠️ 沒有找到台北的 previous_data..."
+          if [ -d "./data" ]; then
+            oldest_taipei=$(ls ./data/taipei_houses_*.json 2>/dev/null | head -1)  
+            if [ ! -z "$oldest_taipei" ]; then
+              cp "$oldest_taipei" ./previous_data/
+              echo "✅ 複製 $oldest_taipei 作為台北前一天資料"
+            fi
+          fi
+        fi
+        
         python taipei_crawler.py taipei
         echo "✅ 台北公寓爬蟲完成: $(TZ='Asia/Taipei' date '+%Y-%m-%d %H:%M:%S %Z')"
     
